@@ -1,0 +1,28 @@
+services:
+  hermes:
+    build:
+      context: .
+    command: ["gateway", "run"]
+    ports:
+      - "127.0.0.1:9119:9119"
+    volumes:
+      - hermes-data:/opt/data
+    environment:
+      HERMES_DASHBOARD: "1"
+      HERMES_DASHBOARD_HOST: "0.0.0.0"
+      HERMES_DASHBOARD_PORT: "9119"
+      API_SERVER_ENABLED: "false"
+      HERMES_DASHBOARD_BASIC_AUTH_USERNAME: "${HERMES_DASHBOARD_BASIC_AUTH_USERNAME:-admin}"
+      HERMES_DASHBOARD_BASIC_AUTH_PASSWORD: "${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD:?Set HERMES_DASHBOARD_BASIC_AUTH_PASSWORD in .env}"
+      HERMES_DASHBOARD_BASIC_AUTH_SECRET: "${HERMES_DASHBOARD_BASIC_AUTH_SECRET:?Set HERMES_DASHBOARD_BASIC_AUTH_SECRET in .env}"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9119/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+volumes:
+  hermes-data:
