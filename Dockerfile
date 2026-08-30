@@ -2,7 +2,7 @@
 
 # Keep the release tag human-readable and the multi-platform digest immutable.
 # Dependabot opens an update PR when Nous Research publishes a newer image.
-FROM nousresearch/hermes-agent:v2026.8.3@sha256:16788311e2fa3035456bdc1bafb8ec2b1777db64ebf020af9bb7eb73c3712c9e
+FROM nousresearch/hermes-agent:v2026.8.27@sha256:e0df6adebddf29b91112aefc999d4aaf6846c9eb544faca5672a16a13590ff79
 
 LABEL org.opencontainers.image.title="Hermes Agent for Railway" \
       org.opencontainers.image.description="Railway template built on the official Nous Research Hermes Agent image" \
