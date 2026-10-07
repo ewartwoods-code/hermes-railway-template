@@ -1,0 +1,86 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+# EWART WOODS - this container is Hermione's web chat, connected to the farm
+# (owner, 2026-10-07: "Railway čats kā Hermione"). Runs as root at every boot,
+# after 015-supervise-perms and before 02-reconcile-profiles.
+#
+# 1. Nothing starts by itself: every persisted gateway intent is set to stopped,
+#    so no cron job and no messaging platform of the old August setup comes back
+#    (the farm is frozen since 2026-09-21). Only the dashboard (its Chat tab) runs.
+# 2. The farm repository is cloned read-only with the deploy key in the Railway
+#    variable FARM_REPO_DEPLOY_KEY (none set: the chat works, farm commands do not).
+# 3. Her persona (SOUL.md, from the farm repository) and her settings (model via
+#    OpenRouter, the Honcho MCP server, the farm repository as working folder) go
+#    into the default profile the chat runs. The August files are kept once as
+#    *.before-hermione.
+set -u
+H="${HERMES_HOME:-/opt/data}"
+PY="${HERMIONE_PY:-/opt/hermes/.venv/bin/python}"
+REPO="$H/ewart-woods-farm"
+log() { echo "[hermione-init] $*"; }
+
+# 1. no gateway starts by itself
+for f in "$H/gateway_state.json" "$H"/profiles/*/gateway_state.json; do
+  [ -f "$f" ] || continue
+  "$PY" - "$f" <<'PYEOF'
+import json, sys
+p = sys.argv[1]
+try:
+    d = json.load(open(p))
+except Exception:
+    d = {}
+d["desired_state"] = "stopped"
+d["gateway_state"] = "stopped"
+json.dump(d, open(p, "w"))
+PYEOF
+  log "gateway intent set to stopped: $f"
+done
+[ -f "$H/gateway_state.json" ] || printf '%s\n' '{"desired_state": "stopped", "gateway_state": "stopped"}' > "$H/gateway_state.json"
+
+# 2. the farm repository, read only
+if [ -n "${FARM_REPO_DEPLOY_KEY:-}" ]; then
+  mkdir -p "$H/.ssh"
+  umask 077
+  printf '%s\n' "$FARM_REPO_DEPLOY_KEY" > "$H/.ssh/farm_deploy"
+  ssh-keyscan -t ed25519 github.com > "$H/.ssh/known_hosts" 2>/dev/null
+  export GIT_SSH_COMMAND="ssh -i $H/.ssh/farm_deploy -o UserKnownHostsFile=$H/.ssh/known_hosts -o IdentitiesOnly=yes"
+  if [ -d "$REPO/.git" ]; then
+    git -C "$REPO" fetch -q origin master && git -C "$REPO" reset -q --hard origin/master
+  else
+    git clone -q --depth 50 git@github.com:ewartwoods-code/ewart-woods-farm.git "$REPO"
+  fi
+  umask 022
+  chown -R hermes:hermes "$H/.ssh" "$REPO" 2>/dev/null || true
+  log "farm repository at $(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo 'NOT CLONED')"
+else
+  log "FARM_REPO_DEPLOY_KEY is not set - no farm repository: the chat works, farm commands do not"
+fi
+
+# 3. her persona and settings
+SOUL_SRC="$REPO/scripts/hermione/hermes-profile/SOUL.md"
+[ -f "$SOUL_SRC" ] || SOUL_SRC=/opt/hermione/SOUL.md
+[ -f "$H/SOUL.md" ] && [ ! -f "$H/SOUL.md.before-hermione" ] && cp "$H/SOUL.md" "$H/SOUL.md.before-hermione"
+cp "$SOUL_SRC" "$H/SOUL.md"
+[ -f "$H/config.yaml" ] && [ ! -f "$H/config.yaml.before-hermione" ] && cp "$H/config.yaml" "$H/config.yaml.before-hermione"
+"$PY" - "$H/config.yaml" "$REPO" <<'PYEOF'
+import os, sys, yaml
+path, repo = sys.argv[1], sys.argv[2]
+try:
+    cfg = yaml.safe_load(open(path)) or {}
+except Exception:
+    cfg = {}
+model = cfg.setdefault("model", {})
+model["default"] = os.environ.get("HERMIONE_MODEL", "anthropic/claude-opus-5")
+model["provider"] = "openrouter"
+model["base_url"] = ""
+term = cfg.setdefault("terminal", {})
+term["backend"] = "local"
+term["cwd"] = repo if os.path.isdir(repo) else os.environ.get("HERMES_HOME", "/opt/data")
+cfg.setdefault("mcp_servers", {})["honcho"] = {
+    "url": "https://mcp.honcho.dev",
+    "headers": {"Authorization": "Bearer ${HONCHO_API_KEY}", "X-Honcho-Workspace-ID": "ewart-woods"},
+}
+yaml.safe_dump(cfg, open(path, "w"), sort_keys=False, allow_unicode=True)
+PYEOF
+chown hermes:hermes "$H/SOUL.md" "$H/config.yaml" "$H/gateway_state.json" 2>/dev/null || true
+log "Hermione's persona and settings installed (model ${HERMIONE_MODEL:-anthropic/claude-opus-5} via OpenRouter)"

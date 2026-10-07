@@ -21,3 +21,12 @@ EXPOSE 9119
 
 # Do not add ENTRYPOINT or CMD here. The upstream entrypoint owns PID 1,
 # initializes /opt/data, drops privileges, and supervises gateway + dashboard.
+
+# EWART WOODS - Hermione's web chat, connected to the farm (owner, 2026-10-07).
+# 019-hermione runs at every boot before the profile reconciler: no gateway, cron or
+# messaging platform starts by itself; her persona, settings and the read-only farm
+# repository are installed. Farm scripts see her name; secrets stay Railway variables.
+ENV FARM_WORKER=hermione \
+    WORKER_ID=hermione
+COPY hermione/SOUL.md /opt/hermione/SOUL.md
+COPY --chmod=0755 hermione/019-hermione /etc/cont-init.d/019-hermione
