@@ -69,6 +69,11 @@ try:
     cfg = yaml.safe_load(open(path)) or {}
 except Exception:
     cfg = {}
+# The August config.yaml predates Hermes's config version 12 and can no longer be
+# migrated (boot log, 2026-10-07): start from a clean config for her instead, keeping
+# the old file as config.yaml.before-hermione.
+if int(cfg.get("_config_version", 0) or 0) < 12:
+    cfg = {"_config_version": 33}
 model = cfg.setdefault("model", {})
 model["default"] = os.environ.get("HERMIONE_MODEL", "anthropic/claude-opus-5")
 model["provider"] = "openrouter"
